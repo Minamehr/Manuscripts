@@ -1,0 +1,12 @@
+
+
+#before performing the metawrap read_qc, change the read-qc.sh in metawrap to accept also the compile file (example *.gz file) and keep all your raw files in a folder (example: Raw_reads folder).
+
+#Read_qc.sh script
+#! /bin/bash
+source /conda.sh
+conda activate metawrap-env
+metawrap read_qc -1 $fq1 -2 $fq2 -t 1 --skip-bmtagger -o $dn
+
+#Then submit the job with the following script
+for r1 in Raw_reads/DE*_1.fq.gz; do bn=$(basename $r1); qsub -q short -v "fq1=$r1, fq2=${r1%_1.fq.gz}_2.fq.gz, dn=READ_QC/${bn%_1.fq.gz}/" Read_qc.sh; done
