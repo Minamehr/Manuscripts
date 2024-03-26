@@ -1,0 +1,35 @@
+#################### De-replication and virus metagenome-assembled genomes (vMAG) creation:
+
+############################## vRhyme ######################
+#Run the vRhyme tool to de-replicate viral contigs and create vMAGs.
+#Activate the conda environment for vRhyme.
+#! /bin/bash
+source /path/to/conda.sh
+conda activate vRhyme
+
+vRhyme -i Four_coassembly_viruses.fasta -t 10 -o Virus_binned  -r Path/to/paired-end_Reads/*.fastq.gz --method longest
+
+#The best-Identified bins files have been further investigated following the vRhyme criteria (Kieft et al., 2022).
+#Select vMAGs that have less than 5 redundant proteins.
+
+#################### Quality Assessment and Annotation:
+#Assess the quality and annotate the final set of un-redundant viral contigs using two different tools: CheckV and Cenote-Taker2.
+CheckV:
+
+############################## Checkv ######################
+#Activate the CheckV conda environment.
+#Run CheckV end-to-end to assess the quality of the de-replicated virus file.
+
+#! /bin/bash
+source /path/to/conda.sh
+conda activate checkv
+checkv end_to_end path/to/dereplicated/virus-file Checkv_dreplicated_virus  -t 8 -d path/to/checkv-db-v1.4
+
+############################# Cenote-Taker2 ####################
+#Activate the Cenote-Taker2 conda environment.
+#Run Cenote-Taker2 to annotate and check the final set of virus contigs.
+
+#! /bin/bash
+source /path/to/conda.sh
+conda activate cenote-taker2_env
+python run_cenote-taker2.py -c path/to/dereplicated/virus-file -r output_folder_name -t 8 -p False -am True --wrap False 

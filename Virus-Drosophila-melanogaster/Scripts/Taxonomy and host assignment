@@ -1,0 +1,59 @@
+# The final steps involve taxonomic assignment using three different approaches.
+
+##################### vpf-class ###########################
+#Taxonomically assign dereplicated virus sequences using the vpf-class tool.
+
+#For unbinned sequences (output from vRhyme), use vpf-class with input and output specified.
+stack exec -- vpf-class --data-index vpf-class-data/index.yaml -i input_file -o Output_folder_name
+
+#For vMAGs, loop over each bin's FASTA file and execute vpf-class individually for each bin.
+for F in $(ls Path/to/bins/foleder/*.fasta | sed 's/.fasta//'); do stack exec -- vpf-class --data-index vpf-class-data/index.yaml -i ${F}.fasta -o ${F}_classified; done
+#Then for each bin we follow ()Popularity.
+
+##################### Diamond ####################
+We also check the taxonomy with the method described in   Kieft_and_Zhou_et_al._2020 (https://github.com/AnantharamanLab/Kieft_and_Zhou_et_al._2020)
+#Prepare a Diamond database using diamond makedb.
+./diamond makedb --in PTT_database.faa --db PTT_database.dmnd
+
+#Run the taxonomic assignment method described by Kieft and Zhou et al. (2020) using a Python script (PTT.py) with Diamond. 
+#The PTT.py file may need some adjustment for the specific dataset.
+python PTT.py -i Virus_dereplicated_proteins.faa
+
+# Loop over each bin's FASTA file, run Prodigal to predict genes, and then execute PTT.py for taxonomic assignment.
+#See PTT.py -h for the help menu.
+
+#For 167 bins
+for F in $(ls *.fasta | sed 's/.fasta//'); do prodigal -i ${F}.fasta -p meta -a ${F}.faa; done
+#then
+for F in $(ls /data/reference/Metawrap/NovSeq/Virus/vRhyme/vRhyme_best_bins/*.faa | sed 's/.faa//'); do python PTT.py -i ${F}.faa; done
+
+##################### vConTACT2 ####################
+#Activate the vConTACT2 conda environment.
+#Run vConTACT2 with specified parameters for taxonomic assignment and clustering.
+#Execute vConTACT2 separately for different sets of contigs: all contigs, long contigs, and high-quality contigs.
+
+conda activate vContact2
+
+vcontact2 --raw-proteins /path/to/proteinfile/Virus_dereplicated_proteins.faa  --proteins-fp /path/to/gene-to-genome/mappingfile/vRhyme_derep_virus.csv --pcs-mode MCL --vcs-mode ClusterONE --seed-method nodes --similarity match --merge-method single --min-size 2 --rel-mode Diamond --db 'ProkaryoticViralRefSeq211-Merged' --output-dir /path/to/output/vConTACT2_derep_Results
+#separate the long-contigs or high-quality viral contigs and rerun the vConTACT2 separately:
+python filter_fasta_by_list_of_headers.py fasta_file.fa list_of_contigs.txt > desier_contigs.fasta
+
+##################### Cytoscape ####################
+#Visualize the vConTACT2 results in Cytoscape for further analysis and interpretation.
+# The most important files are the network and annotation files including (C1.ntw and genome_by_genome_overview.csv) 
+
+##################### CrisprOpenDB ####################
+#Activate the CrisprOpenDB environment.
+#Create a blast database using makeblastdb.
+#Run CrisprOpenDB with the provided input file (Viruses.fasta) and specified options for analysis.
+
+conda activate CrisprOpenDB_env
+makeblastdb -in SpacersDB.fasta -dbtype nucl -out SpacersDB
+python CL_Interface.py -i Novseq/Viruses.fasta 
+python CL_Interface.py -h
+-i", "--input
+-m MISMATCH, --mismatch
+-r, --report
+-b BLASTDB, --blastdb
+-f FASTADB, --fastadb
+-n NUM_THREADS

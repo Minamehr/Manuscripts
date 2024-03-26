@@ -1,0 +1,59 @@
+mkdir Quality_Clean_Reads Mapout Clean_Reads Assemply
+
+############ Rawdata to Clean Reads ##################
+# Quality Control and Trimming:
+#Trim raw reads using Trim-galore with default parameters.
+#Store quality-controlled reads in the Quality_Clean_Reads directory.
+
+
+# filter out host sequences. 
+
+Quality_Clean_Reads=./Quality_Clean_Reads
+Mapout=./Mapout
+Clean_Reads=./Clean_Reads
+
+#Map cleaned reads to the reference genome (Drosophila melanogaster: dm6.fna) using BBMap.
+#Separate mapped and unmapped reads and store them in the Mapout directory.
+
+cd ${Quality_Clean_Reads}
+	
+fq1=$r1 
+fq2=${r1%_1.fastq.gz}_2.fastq.gz
+u1=${r1%_1.fastq.gz}_1_unmapped.fastq.gz
+u2=${r1%_1.fastq.gz}_2_unmapped.fastq.gz 
+m1=${r1%_1.fastq.gz}_1_mapped.fastq.gz
+m2=${r1%_1.fastq.gz}_2_mapped.fastq.gz
+
+BBMap_38.95/bbmap/bbmap.sh ref=/path/to/reference/dm6.fna nodisk -Xmx6g in1=$fq1 in2=$fq2 outu1=${Mapout}/$u1 outu2=${Mapout}/$u2 outm1=${Mapout}/$m1 outm2=${Mapout}/$m2
+##Then transfered unmapped sequences to ${Clean_Reads} folder
+
+############ Calculating Host Contamination: 
+#Use a Python script (datacleaning.py) to extract data from mapping files and calculate the percentage of reads mapped to the reference genome.
+#Store the results in a table.
+#python script from github.com/mehregan59/percentage-mapped-to-reference
+python datacleaning.py Path/to/Mapout
+
+############ Assembly: Clean reads to contigs ##################
+# Co-assemble cleaned reads using Megahit.
+
+megahit=~/bin/megahit
+CleanData=./Clean_Reads
+Assembly=./Assembly
+
+#Merge reads from the same sampling location.
+cat ${Clean_Reads}/${LocID}/*_1.fastq.gz > ${Clean_Reads}/${LocID}_READS_1.fastq.gz
+cat ${Clean_Reads}/${LocID}/*_2.fastq.gz > ${Clean_Reads}/${LocID}_READS_2.fastq.gz
+
+#Perform co-assembly per location.
+#Store assembled contigs in the Assembly directory.
+
+${megahit} -1 ${Clean_Reads}/${LocID}_READS_1.fastq.gz \
+-2 ${Clean_Reads}/${LocID}_READS_2.fastq.gz \
+--min-count 2 \
+--k-min 21 \
+--k-max 141 \
+--k-step 10 \
+--num-cpu-threads 20 \
+--min-contig-len 1000 \
+-o ${Assembly}/ASSEMBLY_${LocID}
+

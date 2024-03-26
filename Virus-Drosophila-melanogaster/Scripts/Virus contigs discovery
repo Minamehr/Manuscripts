@@ -1,0 +1,54 @@
+# We used three different software
+
+#Setup Directories:
+mkdir Vibrant VirSorter DeepVirFinder Virus
+######################## Vibrant ####################
+#Run Vibrant on the final assembled contigs.
+#Store Vibrant results in the Vibrant directory.
+
+ASSEMBLY_LocID= ${ASSEMBLY_LocID}
+VIBRANT=./VIBRANT
+
+python ${VIBRANT}/VIBRANT_run.py -i ${ASSEMBLY_LocID}/${LocID}_final_assembly.fasta
+
+######################## VirSorter ####################
+#Run VirSorter on the final assembled contigs.
+#Filter VirSorter results based on specified criteria (--include-groups, --min-score, --min-length).
+#Store VirSorter results in the VirSorter directory.
+#Activate the conda environment for VirSorter.
+
+VirSorter=./VirSorter
+source /path/to/conda.sh
+conda activate vs2
+
+virsorter run -w ${VirSorter}/${LocID}.out -i ${ASSEMBLY_LocID}/${LocID}_final_assembly.fasta --include-groups  "dsDNAphage,ssDNA,NCLDV" --min-score 0.5 --min-length 1000 -j 4 all
+
+######################## DeepVirFinder ####################
+#Run DeepVirFinder on the final assembled contigs.
+#Activate the conda environment for DeepVirFinder.
+#Store DeepVirFinder results in the DeepVirFinder directory.
+
+DeepVirFinder=./DeepVirFinder
+
+source /path/to/conda.sh
+conda activate dvf
+python dvf.py -i ${ASSEMBLY_LocID}/${LocID}_final_assembly.fasta -o ${DeepVirFinder}/${LocID}_DVF -l 1000
+
+######################## Comparison and Filtering:
+#Use a Python script (Virus_Finder_comparison.py) to compare results from the three software tools and create a final file based on specified criteria.
+#Move outputs from each software to a single folder per sampling location (${LocID}_Virus).
+(${VIBRANT}/VIBRANT_summary_results.tsv ${VirSorter}/${LocID}/final-viral-score.tsv ${DeepVirFinder}/${LocID}_dvfpred.txt)
+
+#Compare results from Vibrant, VirSorter, and DeepVirFinder.
+#Python script adopted from github.com/mehregan59/File_comparison 
+
+python Virus_Finder_comparison.py /path/to/folder/contains/all/three/output/${LocID}_Virus 
+
+###### Final Merge:
+#Merge all final results from the three software tools into a single file per sampling location.
+#Store the merged viral sequences in the Virus directory.
+Virus=./Virus
+
+cat ${LocID}-Virus/*_Filtered_final.fasta > ${Virus}/Four_coassembly_viruses.fasta
+
+
