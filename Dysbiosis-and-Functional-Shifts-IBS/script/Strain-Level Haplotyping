@@ -1,0 +1,96 @@
+# ===============================================================
+# PART 4: Strain-Level Haplotyping with anvi'o and DESMAN
+# ===============================================================
+
+# -------------------- Section 1: SNV profiling --------------------
+
+# (Assuming MAGs are already dereplicated in Dereplicated_IBSC/)
+
+# Index MAG for read mapping
+bwa index Dereplicated_IBSC/IBSC_MAG01.fa
+
+# Map sample reads
+bwa mem -t 8 Dereplicated_IBSC/IBSC_MAG01.fa sample1_1.fastq.gz sample1_2.fastq.gz | \
+  samtools view -bS - > sample1.bam
+
+samtools sort -@ 4 sample1.bam -o sample1_sorted.bam
+samtools index sample1_sorted.bam
+
+# Generate contigs database
+anvi-gen-contigs-database -f Dereplicated_IBSC/IBSC_MAG01.fa -o IBSC_MAG01.db \
+                          -n IBSC_MAG01 --num-threads 8
+
+# Run HMMs
+anvi-run-hmms -c IBSC_MAG01.db --num-threads 8
+
+# Profile BAM file
+anvi-profile -i sample1_sorted.bam -c IBSC_MAG01.db \
+             -o sample1_profile --num-threads 8 --min-contig-length 1000
+# Repeat profiling for each individual sample...
+
+# Merge all sample profiles
+anvi-merge sample*_profile/PROFILE.db -o IBSC_MAG01_merged_profile \
+           -c IBSC_MAG01.db
+
+# Generate SNV variability profile
+anvi-gen-variability-profile -c IBSC_MAG01.db \
+                             -p IBSC_MAG01_merged_profile/PROFILE.db \
+                             -o IBSC_MAG01_variability.txt \
+                             --engine jvara --min-coverage-in-each-sample 10
+
+# Export variability profiles for DESMAN
+anvi-export-variability-profile -p IBSC_MAG01_merged_profile/PROFILE.db \
+                                -c IBSC_MAG01.db \
+                                --output-file-prefix HC_Bin_00001-DESMAN \
+                                --h5 --samples-of-interest all
+
+# This generates:
+#   HC_Bin_00001-DESMANsel_var.csv
+#   HC_Bin_00001-DESMANtran_df.csv
+
+# -------------------- Section 2: DESMAN Strain Inference --------------------
+
+mkdir -p Final
+
+for F in $(ls *-DESMANsel_var.csv | sed 's/-DESMANsel_var.csv//'); do
+    for g in 1 2 3 4 5 6 7 8 10 12; do
+        desman ${F}-DESMANsel_var.csv \
+               -g ${g} \
+               -i 500 \
+               -e ${F}-DESMANtran_df.csv \
+               -o Final/${F}-DESMAN_${g}_0 &
+    done
+done
+wait
+
+# Each result folder will contain: 
+# - haplotypes
+# - strain frequencies
+# - model fit info (fit.txt)
+
+# -------------------- Section 3: Extract Posterior Fit --------------------
+
+for F in $(ls *-Bacteria_71-SNVs.csv | sed 's/-Bacteria_71-SNVs.csv//'); do
+    cat /Bacteria71_genes/Final/${F}*/fit.txt | cut -f2- \
+    > /Bacteria71_genes/Final/${F}-DESMAN.csv
+done
+
+# -------------------- Section 4: Select Optimal Strain Number --------------------
+
+for F in $(ls *-Bacteria_71-SNVs.csv | sed 's/-Bacteria_71-SNVs.csv//'); do
+    python resolvenhap.py -d 0.4 -m 2 -f 0.01 \
+    /Bacteria71_genes/Final/${F}-DESMAN \
+    >> /Bacteria71_genes/Final/desmanStrainOptima.csv
+done
+
+# Output columns: nHap, nGoodHap, index, avg_err, base_pred_file
+
+# -------------------- Section 5: Optional R Visualization --------------------
+
+# In R:
+# library(ggplot2)
+# desStrains <- read.csv("desmanStrainOptima.csv", header=FALSE,
+#                        col.names = c('nHap', 'nGoodHap', 'index', 'avg_err', 'base_pred_file'))
+# IBS <- "HC_Bin_00001"
+# numStrains <- desStrains$nHap[grep(IBS, desStrains$base_pred_file)]
+

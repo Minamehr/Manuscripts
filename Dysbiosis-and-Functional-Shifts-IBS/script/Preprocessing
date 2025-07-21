@@ -1,0 +1,65 @@
+# ==========================================
+# PART 1: Preprocessing
+# ==========================================
+
+# This script processes raw paired-end metagenomic reads from IBS samples and healthy controls.
+
+# Includes:
+# 1. Quality control with TrimGalore
+# 2. Host read removal using BBMap (GRCh38.p13 reference)
+# 3. Initial taxonomic profiling (done via Galaxy EU)
+
+# --------- Directory Setup ---------
+mkdir -p Quality_Clean_Reads Mapout Clean_Reads
+
+# --------- Step 1: Quality Control ---------
+# Tool: TrimGalore
+# Parameters: default paired-end trimming
+
+for r1 in raw_reads/*_1.fastq.gz; do
+    r2=${r1%_1.fastq.gz}_2.fastq.gz
+    trim_galore --paired $r1 $r2 -o Quality_Clean_Reads
+done
+
+# --------- Step 2: Host Read Removal ---------
+# Tool: BBMap v38.95
+# Reference: GRCh38.p13 human genome
+# Goal: Remove reads mapped to host genome; retain unmapped reads
+
+Quality_Clean_Reads=./Quality_Clean_Reads
+Mapout=./Mapout
+Clean_Reads=./Clean_Reads
+
+cd ${Quality_Clean_Reads}
+
+for fq1 in *_val_1.fq.gz; do
+    fq2=${fq1%_val_1.fq.gz}_val_2.fq.gz
+    base=${fq1%_val_1.fq.gz}
+
+    u1=${base}_1_unmapped.fastq.gz
+    u2=${base}_2_unmapped.fastq.gz
+    m1=${base}_1_mapped.fastq.gz
+    m2=${base}_2_mapped.fastq.gz
+
+    BBMap_38.95/bbmap/bbmap.sh ref=/path/to/GRCh38.fna nodisk -Xmx6g \
+        in1=$fq1 in2=$fq2 \
+        outu1=../Mapout/$u1 outu2=../Mapout/$u2 \
+        outm1=../Mapout/$m1 outm2=../Mapout/$m2
+done
+
+cd ..
+
+# --------- Step 3: Move Unmapped Reads ---------
+# Only unmapped reads (host-free) are kept for downstream analysis
+mv Mapout/*_unmapped.fastq.gz Clean_Reads/
+
+# --------- Step 4: Initial Taxonomic Profiling ---------
+# Tool: Kraken2 + Bracken, MetaPhlAn
+# Platform: (www.usegalaxy.eu/)
+
+# Note:
+# For initial taxonomic profiling, reads from the `Clean_Reads` directory were analyzed using Galaxy EU.
+# - Kraken2 + Bracken: for species-level quantification
+# - MetaPhlAn: used for validation and higher-resolution profiling
+
+

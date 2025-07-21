@@ -1,0 +1,119 @@
+# ================================================
+# PART 2: Metagenomic Assembly & Gene Catalog
+# ================================================
+
+# This step performs per-sample assembly, gene prediction, gene clustering,
+# taxonomic and functional annotation, and abundance estimation.
+
+# --------- Step 1: Assembly with MetaSPAdes ---------
+# Tool: MetaSPAdes
+# Input: Clean reads from each individual (host-filtered)
+# Output: Individual contig assemblies
+
+mkdir -p Assembly
+
+for sample in $(ls Clean_Reads/*_1_unmapped.fastq.gz | sed 's/_1_unmapped.fastq.gz//' | xargs -n1 basename); do
+    spades.py --meta \
+      -1 Clean_Reads/${sample}_1_unmapped.fastq.gz \
+      -2 Clean_Reads/${sample}_2_unmapped.fastq.gz \
+      -o Assembly/${sample}
+done
+
+# --------- Step 2: Gene Prediction with Prodigal ---------
+# Tool: Prodigal
+# Mode: metagenomic
+# Output: protein (FAA), nucleotide (FNA), GFF3, and tabular summaries
+
+mkdir -p Genes
+
+for asm in Assembly/*/contigs.fasta; do
+    sample=$(basename $(dirname $asm))
+    prodigal -i $asm \
+      -a Genes/${sample}.faa \
+      -d Genes/${sample}.fna \
+      -f gff \
+      -o Genes/${sample}.gff \
+      -p meta
+done
+
+# Optional: filter genes shorter than 100 bp (done later before clustering)
+
+# --------- Step 3: Clustering Genes (Non-Redundant Catalog) ---------
+# Tool: MMseqs2
+# Identity: 95%
+# Coverage: 90% (alignments covering ≥90% of shorter sequence)
+
+mkdir -p Clustering
+
+# Prepare combined gene file
+cat Genes/*.faa > Clustering/all_genes.faa
+
+# Create MMseqs2 DB
+mmseqs createdb Clustering/all_genes.faa Clustering/genecatalog_db
+
+# Run clustering
+mmseqs linclust Clustering/genecatalog_db Clustering/clusters_tmp Clustering/tmp \
+  --min-seq-id 0.95 -c 0.9 --cov-mode 1 --threads 20
+
+# Extract representative sequences
+mmseqs createseqfiledb Clustering/genecatalog_db Clustering/clusters_tmp Clustering/rep_seq_db
+mmseqs result2flat Clustering/genecatalog_db Clustering/genecatalog_db Clustering/rep_seq_db Clustering/rep_seq.faa
+
+# --------- Step 4: Taxonomic Annotation (UniProt TrEMBL) ---------
+# Tool: DIAMOND
+# DB: UniProt TrEMBL
+
+diamond blastp -d /path/to/uniprot_trembl.dmnd \
+  -q Clustering/rep_seq.faa \
+  -o Clustering/diamond_annotation.tsv \
+  -f 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore stitle \
+  -k 1 -e 1e-5 -p 16
+
+# --------- Step 5: Functional Annotation ---------
+
+## 5.1 KEGG using KOBAS
+# Format protein file to FASTA, run KOBAS annotate
+kobas-annotate -i Clustering/rep_seq.faa -t fasta:pro -s ko -o KOBAS_annotation.tsv
+
+## 5.2 COG via eggNOG-mapper
+emapper.py -i Clustering/rep_seq.faa \
+  --output emapper_output --cpu 16 --itype proteins
+
+## 5.3 CAZyme Annotation via dbCAN + HMMER
+# Input: Clustering/rep_seq.faa
+# Run hmmscan against dbCAN HMMs
+hmmscan --domtblout dbcan_out.domtblout \
+  --cpu 16 /path/to/dbCAN-HMMdb-V8.txt \
+  Clustering/rep_seq.faa > dbcan_out.txt
+
+## 5.4 ARGs and Virulence Factors via PathoFact
+# PathoFact script expected input: protein fasta
+# Run the pipeline as configured in PathoFact (see: https://github.com/PathoFact/PathoFact)
+
+python pathofact.py -i Clustering/rep_seq.faa -o pathofact_output/ --threads 20
+
+# --------- Step 6: Gene Abundance Estimation ---------
+
+# Map clean reads back to clustered genes using BWA-MEM
+mkdir -p GeneAbundance
+
+# Index gene catalog
+bwa index Clustering/rep_seq.faa
+
+for sample in $(ls Clean_Reads/*_1_unmapped.fastq.gz | sed 's/_1_unmapped.fastq.gz//' | xargs -n1 basename); do
+    bwa mem Clustering/rep_seq.faa \
+      Clean_Reads/${sample}_1_unmapped.fastq.gz \
+      Clean_Reads/${sample}_2_unmapped.fastq.gz | \
+      samtools view -Sb - > GeneAbundance/${sample}.bam
+done
+
+# Sort + index BAM (optional)
+for bam in GeneAbundance/*.bam; do
+    samtools sort $bam -o ${bam%.bam}_sorted.bam
+    samtools index ${bam%.bam}_sorted.bam
+done
+
+# Coverage estimation (e.g., using SamSum or featureCounts, depending on your choice)
+# Normalize as FPKM or TPM later during downstream analysis
+
+

@@ -1,0 +1,106 @@
+# ===============================================================
+# PART 3: Genome Reconstruction — MAGs from Co-Assemblies
+# ===============================================================
+
+# This script performs:
+# - Co-assembly per group using MetaSPAdes
+# - Mapping reads back to contigs with BWA-MEM
+# - Depth calculation for binning
+# - Binning with MaxBin2, MetaBAT2, CONCOCT
+# - Bin refinement with metaWRAP
+# - CheckM for bin quality
+# - Dereplication with anvi-dereplicate-genomes
+# - Taxonomy assignment with GTDB-Tk
+
+# --------- Step 1: Co-Assembly with MetaSPAdes ---------
+
+mkdir -p CoAssembly
+
+# Example: Co-assembly of IBS-C group
+metaspades.py -1 Clean_Reads/IBSC_1.fastq.gz \
+              -2 Clean_Reads/IBSC_2.fastq.gz \
+              -o CoAssembly/IBSC_metaspades \
+              -k 21,33,55,77,99,127 \
+              -t 8 -m 250
+
+# Repeat for IBSD, IBSM, and HC
+
+
+# --------- Step 2: Mapping reads back to contigs ---------
+
+bwa index CoAssembly/IBSC_metaspades/contigs.fasta
+
+bwa mem -t 8 CoAssembly/IBSC_metaspades/contigs.fasta \
+  Clean_Reads/IBSC_1.fastq.gz \
+  Clean_Reads/IBSC_2.fastq.gz | \
+  samtools view -bS - > IBSC.bam
+
+samtools sort -@ 4 IBSC.bam -o IBSC_sorted.bam
+samtools index IBSC_sorted.bam
+
+
+# --------- Step 3: Depth Calculation ---------
+
+jgi_summarize_bam_contig_depths --outputDepth IBSC_depth.txt \
+  --pairedContigs CoAssembly/IBSC_metaspades/contigs.fasta \
+  IBSC_sorted.bam
+
+
+# --------- Step 4: Binning ---------
+
+mkdir -p Binning/IBSC
+
+# MetaBAT2
+metabat2 -i CoAssembly/IBSC_metaspades/contigs.fasta \
+         -a IBSC_depth.txt \
+         -o Binning/IBSC/metabat2/bin \
+         -t 8 --minContig 1500
+
+# MaxBin2
+run_MaxBin.pl -contig CoAssembly/IBSC_metaspades/contigs.fasta \
+              -abund IBSC_depth.txt \
+              -out Binning/IBSC/maxbin2/bin \
+              -thread 8
+
+# CONCOCT (assumes you have already fragmented and generated coverage tables)
+concoct --composition_file concoct_composition.tsv \
+        --coverage_file concoct_coverage.tsv \
+        -b Binning/IBSC/concoct/ -t 8
+
+
+# --------- Step 5: Bin Refinement with metaWRAP ---------
+
+metaWRAP/bin_refinement/bin_refinement.py \
+  -o Binning/IBSC/refined_bins \
+  -A Binning/IBSC/metabat2 \
+  -B Binning/IBSC/maxbin2 \
+  -C Binning/IBSC/concoct \
+  -c 70 -x 5 -t 8
+
+
+# --------- Step 6: Quality Control with CheckM ---------
+
+checkm lineage_wf -t 8 \
+  -x fa Binning/IBSC/refined_bins \
+  Binning/IBSC/checkm_output
+
+
+# --------- Step 7: Dereplication with anvi’o ---------
+
+# Generate input file for anvi-dereplicate-genomes
+for bin in Binning/IBSC/refined_bins/*.fa; do
+    echo -e "$(basename ${bin%.fa})\t$bin"
+done > IBSC_genomes.txt
+
+# Run dereplication
+anvi-dereplicate-genomes -i IBSC_genomes.txt \
+                         -o Dereplicated_IBSC \
+                         --ANI 95 \
+                         --T 8
+
+
+# --------- Step 8: Taxonomy Assignment with GTDB-Tk ---------
+
+gtdbtk classify_wf --genome_dir Dereplicated_IBSC/ \
+                   --out_dir GTDBTK_IBSC \
+                   --cpus 8

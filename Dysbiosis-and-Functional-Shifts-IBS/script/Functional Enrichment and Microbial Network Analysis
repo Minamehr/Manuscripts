@@ -1,0 +1,84 @@
+# ===============================================================
+# PART 5: Functional Enrichment and Microbial Network Analysis
+# ===============================================================
+
+# -------------------- Section 1: Estimate Metabolism --------------------
+
+# Estimate pathway presence/absence and completeness for each MAG
+for db in Dereplicated_IBSC/*.db; do
+    anvi-estimate-metabolism -c $db \
+        --external-genomes external-genomes.txt \
+        --kegg-data-dir /path/to/anvio-kegg-data/ \
+        --output-dir KEGG_estimates/$(basename $db .db) \
+        --num-threads 8
+done
+
+# Output: JSON and TSV files describing presence and completeness of KEGG pathways
+
+
+# -------------------- Section 2: Metabolic Enrichment --------------------
+
+# Test for functional enrichment between groups (e.g. IBS vs HC)
+# Requires merged profile, contigs.db, and group.txt
+
+anvi-compute-metabolic-enrichment \
+    -p IBS_MAG01_merged_profile/PROFILE.db \
+    -c IBS_MAG01.db \
+    --kegg-data-dir /path/to/anvio-kegg-data/ \
+    --annotation-source KEGG \
+    --functional-annotation KEGG_estimates/IBS_MAG01-kegg_pathways.tsv \
+    --group-variable disease_group \
+    --group-name-mapping group_file.txt \
+    -o metabolic_enrichment_output
+
+# Output includes enriched pathways per group with p-values
+
+
+# -------------------- Section 3: Network Analysis (Taxa & Genes) --------------------
+
+# Prepare table of taxon or gene abundance across samples
+# Use previously generated Bracken/MetaPhlAn or gene abundance tables
+
+# Run FastSpar (or SparCC) to estimate sparse correlations
+fastspar --otu_table input_abundance_table.tsv \
+         --correlation correlation.tsv \
+         --covariance covariance.tsv \
+         --iterations 1000 \
+         --threads 8
+
+# Create bootstrap replicates
+mkdir boots
+for i in {1..100}; do
+    fastspar_bootstrap --otu_table input_abundance_table.tsv \
+                       --number 1000 \
+                       --prefix boots/boot_${i}_
+done
+
+# Compute p-values for each correlation
+fastspar_pvalues --otu_table input_abundance_table.tsv \
+                 --correlation correlation.tsv \
+                 --prefix boots/boot_ \
+                 --outfile pvalues.tsv
+
+# Filter correlations (e.g., abs ≥ 0.5 and p < 0.05)
+# Create final network edge list for Cytoscape
+
+awk 'NR>1 && ($3 >= 0.5 || $3 <= -0.5) && $4 < 0.05' correlation_with_pvalues.tsv \
+    > network_edges.tsv
+
+
+# -------------------- Section 4: Cytoscape Visualization --------------------
+
+# Import `network_edges.tsv` in Cytoscape:
+# - Use nodes as taxa or gene IDs
+# - Style by group, abundance, or centrality metrics
+
+# Optionally compute centrality and modularity using NetworkX (Python)
+python analyze_network.py network_edges.tsv
+
+# Where `analyze_network.py` computes:
+# - Degree, betweenness, closeness
+# - Fragmentation
+# - Top connected nodes (hubs)
+
+# Final figures saved as PDF/SVG for manuscript
