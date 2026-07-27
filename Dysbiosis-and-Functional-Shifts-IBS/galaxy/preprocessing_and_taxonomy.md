@@ -1,32 +1,48 @@
-# Galaxy record: short-read preprocessing and taxonomic profiling
+# Preprocessing and taxonomic profiling
 
-## Execution environment
+All steps in this section were performed in Galaxy.
 
-- Platform: Galaxy
-- Public instance: UseGalaxy.eu
-- Published taxonomy workflow:
-  https://usegalaxy.eu/published/workflow?id=7491883694fff308
+## Input
 
-## Analysis steps
+Paired-end raw shotgun metagenomic FASTQ files.
 
-1. Raw paired-end reads were quality-filtered and adapters were removed using Trim Galore v0.6.6.
-2. Human-derived reads were removed by alignment against GRCh38.p13 using BBMap.
-3. Host-filtered reads were taxonomically classified using Kraken2.
-4. Bracken was used for abundance estimation.
-5. MetaPhlAn was used for complementary taxonomic profiling and cross-method comparison.
+## 1. Quality trimming
 
-## Reproducibility information to add
+**Tool:** Trim Galore
+**Software version:** 0.6.6
+**Mode:** paired-end
+**Input:** raw R1 and R2 FASTQ files
+**Output:** paired trimmed FASTQ files
 
-For each Galaxy tool, add from the original Galaxy history:
+Default paired-end trimming settings were used unless otherwise recorded in the Galaxy history.
 
-- Galaxy wrapper version;
-- underlying software version;
-- complete parameter settings;
-- input dataset identifiers;
-- output dataset identifiers;
-- database build or release;
-- exported workflow or history link, when available.
+## 2. Human-read removal
 
-## Scope note
+**Tool:** BBMap
+**Software version:** 38.95
+**Reference:** GRCh38.p13
+**Input:** paired trimmed FASTQ files
+**Output:** paired reads that did not map to the human reference
 
-This file documents analyses actually performed within Galaxy. It is not a reconstructed command-line substitute.
+Only the paired unmapped reads were retained for downstream taxonomic, assembly, and genome-recovery analyses.
+
+## 3. Kraken2 and Bracken profiling
+
+**Input:** host-filtered paired FASTQ files
+
+Kraken2 produced per-read classifications and per-sample taxonomic reports. Bracken used the Kraken2 reports to estimate species-level abundance.
+
+The Kraken2 database selection, Bracken database, and read-length setting must match those recorded in the Galaxy workflow/history.
+
+## 4. MetaPhlAn profiling
+
+**Input:** host-filtered paired FASTQ files
+**Output:** species- and strain-level taxonomic abundance tables
+
+MetaPhlAn was used as a complementary marker-gene-based taxonomic profiler.
+
+## Public Galaxy workflow
+
+https://usegalaxy.eu/published/workflow?id=7491883694fff308
+
+The shared workflow provides the connected Galaxy tools and workflow structure for taxonomic profiling.

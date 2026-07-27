@@ -1,56 +1,54 @@
-# Galaxy record: group-wise co-assembly and initial MAG recovery
+# Group-wise co-assembly and MAG recovery
 
-## Galaxy-executed steps
+All assembly, binning, refinement, and initial quality-assessment steps in this section were performed in Galaxy.
 
-Gut microbial genomes from healthy controls and patients with IBS were reconstructed using group-wise co-assembly and multiple binning tools implemented within Galaxy.
+## Input groups
 
-The Galaxy-based recovery steps were:
+Host-filtered paired reads were analysed separately for:
 
-1. Separate co-assembly of clean reads from:
-   - HC;
-   - IBS-C;
-   - IBS-D;
-   - IBS-M.
-2. Co-assembly using metaSPAdes.
-3. Genome binning using:
-   - MetaBAT2;
-   - MaxBin2;
-   - CONCOCT.
-4. Bin refinement using the metaWRAP Bin Refinement module with:
-   - minimum completeness threshold: 70%;
-   - maximum contamination threshold: 5%.
-5. Initial completeness and contamination assessment using CheckM.
+- HC;
+- IBS-C;
+- IBS-D;
+- IBS-M.
 
-## Downstream analyses performed separately
+## 1. Group-wise co-assembly
 
-The resulting bins were exported for downstream processing, including:
+**Tool:** metaSPAdes
+**Design:** one co-assembly for each of the four study groups
+**Output:** HC, IBS-C, IBS-D, and IBS-M co-assemblies
 
-- anvi'o-based genome assessment and manual inspection;
-- assessment using 71 universal bacterial single-copy genes;
-- pooling of bins from the four study groups;
-- duplicate identification at >=99% ANI;
-- retention of a nonredundant MAG set;
-- taxonomy assignment using GTDB-Tk;
-- functional annotation using COG, Pfam, KOfam, and CAZyme resources;
-- metabolic reconstruction and enrichment analysis;
-- phylogenomic reconstruction using anvi'o and MUSCLE;
-- strain-level haplotyping using anvi'o and DESMAN.
+## 2. Coverage profiles
 
-The final analysis retained 154 nonredundant quality-filtered MAGs.
+Reads from each sample were mapped to the appropriate group co-assembly to generate the contig-coverage information required for binning.
 
-## Reproducibility information to add
+## 3. Independent genome binning
 
-From the original Galaxy histories, add:
+Each group co-assembly was binned using:
 
-- metaSPAdes wrapper and software versions;
-- MetaBAT2 wrapper and software versions;
-- MaxBin2 wrapper and software versions;
-- CONCOCT wrapper and software versions;
-- metaWRAP wrapper and software versions;
-- CheckM wrapper and software versions;
-- exact parameters and database releases;
-- exported histories or workflows, when available.
+- MetaBAT2;
+- MaxBin2;
+- CONCOCT.
 
-## Scope note
+## 4. Bin refinement
 
-This file documents only the Galaxy-executed recovery stage. Downstream anvi'o, GTDB-Tk, DESMAN, metabolic, statistical, and figure-generation code belongs under `scripts/mag_analysis_final/` after validation.
+**Tool:** metaWRAP Bin Refinement
+**Minimum completeness:** 70%
+**Maximum contamination:** 5%
+
+The three independent bin sets were supplied to metaWRAP for refinement.
+
+## 5. Initial genome-quality assessment
+
+**Tool:** CheckM
+**Input:** refined group-specific bins
+**Output:** completeness and contamination estimates
+
+## Downstream processing
+
+The refined bins were exported from Galaxy for anvi'o processing, 99% ANI dereplication, GTDB-Tk classification, genome annotation, abundance/recruitment analysis, phylogenomics, metabolic enrichment, and DESMAN haplotyping.
+
+These steps are documented in:
+
+- `../script/MAG Downstream Analysis`
+- `../script/MAG Metabolic Enrichment`
+- `../script/Strain-Level Haplotyping`

@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# GENE TAXONOMIC/FUNCTIONAL ANNOTATION AND ABUNDANCE ESTIMATION
+#
+# Inputs exported from Galaxy:
+#   nonredundant_proteins.faa
+#   nonredundant_genes.fna
+#   host-filtered paired FASTQ files
+#
+# Replace database and environment paths before use.
+
+PROTEINS=${PROTEINS:-nonredundant_proteins.faa}
+GENES=${GENES:-nonredundant_genes.fna}
+CLEAN_READS=${CLEAN_READS:-Clean_Reads}
+OUT=${OUT:-Gene_Annotation_and_Abundance}
+THREADS=${THREADS:-20}
+TREMBL_DB=${TREMBL_DB:-/path/to/uniprot_trembl.dmnd}
+DBCAN_HMM=${DBCAN_HMM:-/path/to/dbCAN-HMMdb.txt}
+PFAM_HMM=${PFAM_HMM:-/path/to/Pfam-A.hmm}
+
+mkdir -p "$OUT"/{taxonomy,kegg,cog,cazyme,pfam,pathofact,mapping,samsum}
+
+# 1. Taxonomic annotation against UniProt TrEMBL.
+diamond blastp \
+  --db "$TREMBL_DB" \
+  --query "$PROTEINS" \
+  --out "$OUT/taxonomy/uniprot_trembl_best_hit.tsv" \
+  --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore stitle \
+  --max-target-seqs 1 \
+  --evalue 1e-5 \
+  --threads "$THREADS"
+
+# 2. KEGG annotation with KOBAS.
+kobas-annotate \
+  -i "$PROTEINS" \
+  -t fasta:pro \
+  -s ko \
+  -o "$OUT/kegg/KOBAS_annotation.tsv"
+
+# 3. COG annotation with eggNOG-mapper.
+emapper.py \
+  -i "$PROTEINS" \
+  --itype proteins \
+  --cpu "$THREADS" \
+  --output "$OUT/cog/eggnog"
+
+# 4. CAZyme annotation with dbCAN HMMs and HMMER.
+hmmscan \
+  --cpu "$THREADS" \
+  --domtblout "$OUT/cazyme/dbcan.domtblout" \
+  "$DBCAN_HMM" \
+  "$PROTEINS" \
+  > "$OUT/cazyme/dbcan.hmmscan.log"
+
+# 5. Pfam domain annotation.
+hmmscan \
+  --cpu "$THREADS" \
+  --domtblout "$OUT/pfam/pfam.domtblout" \
+  "$PFAM_HMM" \
+  "$PROTEINS" \
+  > "$OUT/pfam/pfam.hmmscan.log"
+
+# 6. ARG and virulence-factor annotation with PathoFact.
+# Run PathoFact with the project configuration and the nonredundant protein FASTA.
+#
+# Example:
+# pathofact.py \
+#   -i "$PROTEINS" \
+#   -o "$OUT/pathofact" \
+#   --threads "$THREADS"
+
+# 7. Map each sample to the nucleotide gene catalogue.
+bwa index "$GENES"
+
+for r1 in "$CLEAN_READS"/*_1_unmapped.fastq.gz; do
+    sample=$(basename "${r1%_1_unmapped.fastq.gz}")
+    r2="$CLEAN_READS/${sample}_2_unmapped.fastq.gz"
+
+    bwa mem \
+      -t "$THREADS" \
+      "$GENES" \
+      "$r1" \
+      "$r2" \
+      > "$OUT/mapping/${sample}.sam"
+
+    # Samsum reports sequence length, mapped fragments, FPKM, and TPM.
+    samsum stats \
+      -f "$GENES" \
+      -a "$OUT/mapping/${sample}.sam" \
+      --multireads \
+      -o "$OUT/samsum/${sample}.tsv"
+done
+
+# Merge the per-sample Samsum FPKM columns by gene identifier to construct the
+# final gene-abundance matrix used for downstream functional analyses.

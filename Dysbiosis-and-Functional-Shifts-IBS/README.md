@@ -1,131 +1,62 @@
-# Shotgun Metagenomic Analysis of the Gut Microbiome in Irritable Bowel Syndrome
+# Shotgun metagenomic analysis of the gut microbiome in irritable bowel syndrome
 
-This repository contains documentation, cleaned reproducibility scripts, supporting metadata, and archived exploratory code associated with a shotgun metagenomic study comparing patients with irritable bowel syndrome (IBS) and healthy controls.
-
-The final study cohort comprised 42 metagenomes:
-
-- 17 healthy controls
-- 25 patients with IBS
-- IBS-C, IBS-D, and IBS-M subtype groups
+This repository documents the final analysis workflow used for 42 gut metagenomes: 17 healthy controls and 25 participants with irritable bowel syndrome, including IBS-C, IBS-D, and IBS-M.
 
 Raw sequencing data are available from the European Nucleotide Archive under accession **PRJEB104707**.
 
-## Repository principles
+## Repository organisation
 
-This repository distinguishes three types of material:
+### `galaxy/`
 
-1. **Galaxy-executed analyses**
-   These are documented using the Galaxy instance, tool names, tool versions, parameters, inputs, outputs, and public workflow or history links where available. They are not represented by invented command-line scripts.
+This directory documents analyses performed in Galaxy:
 
-2. **Cleaned reproducibility implementations**
-   These scripts implement the final analyses reported in the revised manuscript and are validated against the final locked results.
+1. `preprocessing_and_taxonomy.md`
+   - paired-end quality trimming;
+   - removal of human reads;
+   - Kraken2 and Bracken taxonomic profiling;
+   - MetaPhlAn taxonomic profiling.
 
-3. **Archived exploratory analyses**
-   Earlier scripts are retained for provenance but are not used to support the final manuscript conclusions.
+2. `gene_catalogue.md`
+   - individual metagenomic assembly;
+   - gene prediction;
+   - removal of genes shorter than 100 bp;
+   - MMseqs2 construction of the nonredundant gene catalogue.
 
-## Analysis overview
+3. `mag_recovery.md`
+   - group-wise co-assembly for HC, IBS-C, IBS-D, and IBS-M;
+   - MetaBAT2, MaxBin2, and CONCOCT binning;
+   - metaWRAP bin refinement;
+   - CheckM quality assessment.
 
-### Short-read preprocessing and taxonomic profiling
+### `script/`
 
-Read preprocessing and read-based taxonomic profiling were performed using versioned tools on the European Galaxy server, UseGalaxy.eu.
+This directory contains analyses performed outside Galaxy:
 
-The main steps included:
+1. `Gene Annotation and Abundance`
+   - UniProt TrEMBL taxonomic annotation;
+   - KOBAS, eggNOG-mapper, dbCAN/HMMER, Pfam, and PathoFact annotation;
+   - BWA-MEM mapping to the nucleotide gene catalogue;
+   - Samsum abundance estimation and FPKM output.
 
-- adapter and quality trimming with Trim Galore;
-- removal of human-derived reads using BBMap against GRCh38.p13;
-- taxonomic classification with Kraken2;
-- abundance estimation with Bracken;
-- complementary taxonomic profiling with MetaPhlAn.
+2. `MAG Downstream Analysis`
+   - anvi'o database construction and genome assessment;
+   - COG, KOfam, Pfam, and CAZyme annotation;
+   - dereplication at 99% ANI;
+   - GTDB-Tk taxonomy;
+   - abundance/recruitment summaries and phylogenomics.
 
-The initial version of the Galaxy Metagenomic Taxonomy Analysis workflow is publicly available at:
+3. `MAG Metabolic Enrichment`
+   - anvi'o metabolic-module estimation;
+   - HC-versus-IBS metabolic enrichment.
 
-https://usegalaxy.eu/published/workflow?id=7491883694fff308
+4. `Strain-Level Haplotyping`
+   - anvi'o nucleotide-variation profiling;
+   - DESMAN haplotype inference and model selection.
 
-See `galaxy/preprocessing_and_taxonomy.md`.
+Local database paths, Galaxy history links, and sample-specific paths must be adapted before applying the workflow to another dataset.
 
-### Gene-catalogue construction
+## Main outputs
 
-Metagenomic assembly, gene prediction, sequence-length filtering, and sequence clustering for gene-catalogue construction were performed using versioned tools implemented within Galaxy.
-
-The Galaxy-based steps included:
-
-- individual assembly using metaSPAdes;
-- gene prediction using Prodigal in metagenomic mode;
-- removal of genes shorter than the threshold reported in the final Methods;
-- sequence clustering using MMseqs2 at >=95% sequence identity and >=90% alignment coverage.
-
-Downstream taxonomic and functional annotation and gene-abundance estimation were performed using the software and databases described in the manuscript, including UniProt TrEMBL, KOBAS, eggNOG-mapper, dbCAN/HMMER, Pfam, PathoFact, BWA-MEM, Samsum, and FPKM normalization.
-
-The final nonredundant gene catalogue contained **934,495 genes**.
-
-See `galaxy/gene_catalogue_construction.md`.
-
-### Genome recovery and downstream MAG analysis
-
-Gut microbial genomes were reconstructed using group-wise co-assembly and multiple binning tools implemented within Galaxy.
-
-The Galaxy-based recovery steps included:
-
-- separate co-assemblies for HC, IBS-C, IBS-D, and IBS-M using metaSPAdes;
-- binning with MetaBAT2, MaxBin2, and CONCOCT;
-- bin refinement with the metaWRAP Bin Refinement module;
-- initial completeness and contamination assessment with CheckM.
-
-The resulting bins were exported for downstream analysis using anvi'o, GTDB-Tk, MUSCLE, DESMAN, and associated statistical procedures.
-
-The final analysis retained **154 nonredundant quality-filtered MAGs**.
-
-See `galaxy/mag_recovery.md`.
-
-### Final network analysis
-
-The final microbial association analysis used:
-
-- shared-prevalence filtering;
-- multiplicative zero replacement, closure, and CLR transformation;
-- Pearson correlation as the primary estimator;
-- label permutation testing;
-- equal-size HC-versus-IBS comparisons;
-- balanced bootstrap assessment;
-- edge-stability bootstrapping;
-- BH multiple-testing correction;
-- prevalence, threshold, Spearman, and SparCC sensitivity analyses.
-
-The final analysis did not provide robust evidence of widespread microbial-network fragmentation, altered cross-domain organization, or global functional-network restructuring in IBS.
-
-Earlier SparCC hub, centrality, fragmentation, and subtype-network scripts are retained only under `archive/`.
-
-## Directory structure
-
-```text
-galaxy/
-    preprocessing_and_taxonomy.md
-    gene_catalogue_construction.md
-    mag_recovery.md
-
-scripts/
-    diversity_and_taxonomy/
-    gene_function_final/
-    mag_analysis_final/
-    network_final/
-    figures/
-
-archive/
-    legacy_command_examples/
-    legacy_network_analysis/
-```
-
-## Galaxy citations
-
-Analyses performed within Galaxy should cite:
-
-- The Galaxy Community. Galaxy for accessible, reproducible, and collaborative data analyses: 2026 update. *Nucleic Acids Research*. 2026;54(W1):W105-W116. doi:10.1093/nar/gkag469.
-- Blankenberg D, Von Kuster G, Bouvier E, Baker D, Afgan E, Stoler N, et al. Dissemination of scientific software with Galaxy ToolShed. *Genome Biology*. 2014;15:403. doi:10.1186/gb4161.
-
-The original publication for every individual scientific tool should also be cited.
-
-## Repository status
-
-The Galaxy documentation is complete at the level currently supported by the manuscript record. Exact Galaxy wrapper versions and exported histories should be added where available.
-
-Cleaned reproducibility implementations are included for the final network, gene-function, and MAG metabolic-enrichment analyses. These scripts encode the locked analytical logic reported in the revised manuscript but are not presented as byte-for-byte copies of the original historical scripts. Archived exploratory scripts should not be interpreted as final analytical implementations.
+- Nonredundant gene catalogue: **934,495 genes**.
+- Nonredundant quality-filtered MAG set: **154 MAGs**.
+- MAG metabolic enrichment input: **221 group-specific genome/bin entries** comprising 94 HC and 127 IBS entries.

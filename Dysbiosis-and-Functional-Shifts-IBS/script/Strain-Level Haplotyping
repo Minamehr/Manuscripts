@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# STRAIN-LEVEL HAPLOTYPING WITH ANVI'O AND DESMAN
+#
+# This analysis was performed outside Galaxy.
+#
+# Required inputs for each MAG:
+#   MAG_FASTA
+#   paired FASTQ files for all samples
+#   one sorted/indexed BAM per sample
+#   anvi'o contigs database and merged profile database
+
+MAG_FASTA=${MAG_FASTA:?Path to one dereplicated MAG FASTA}
+MAG_NAME=${MAG_NAME:?MAG identifier}
+BAM_DIR=${BAM_DIR:?Directory containing sorted/indexed BAM files}
+OUT=${OUT:-DESMAN_${MAG_NAME}}
+THREADS=${THREADS:-8}
+
+mkdir -p "$OUT"/{profiles,variability,desman_input,runs,fit,optimal}
+
+# 1. Generate the anvi'o contigs database and identify single-copy genes.
+anvi-gen-contigs-database \
+  -f "$MAG_FASTA" \
+  -o "$OUT/${MAG_NAME}.db" \
+  -n "$MAG_NAME"
+
+anvi-run-hmms \
+  -c "$OUT/${MAG_NAME}.db" \
+  --num-threads "$THREADS"
+
+# 2. Profile every sample against the MAG.
+for bam in "$BAM_DIR"/*.sorted.bam; do
+    sample=$(basename "${bam%.sorted.bam}")
+
+    anvi-profile \
+      -i "$bam" \
+      -c "$OUT/${MAG_NAME}.db" \
+      -o "$OUT/profiles/${sample}" \
+      --num-threads "$THREADS" \
+      --min-contig-length 1000
+done
+
+# 3. Merge all sample profiles.
+anvi-merge \
+  "$OUT"/profiles/*/PROFILE.db \
+  -o "$OUT/merged_profile" \
+  -c "$OUT/${MAG_NAME}.db"
+
+# 4. Generate the nucleotide variability profile.
+anvi-gen-variability-profile \
+  -c "$OUT/${MAG_NAME}.db" \
+  -p "$OUT/merged_profile/PROFILE.db" \
+  -o "$OUT/variability/${MAG_NAME}_variability.tsv" \
+  --engine jvara \
+  --min-coverage-in-each-sample 10
+
+# 5. Export the variability data for DESMAN.
+anvi-export-variability-profile \
+  -p "$OUT/merged_profile/PROFILE.db" \
+  -c "$OUT/${MAG_NAME}.db" \
+  --output-file-prefix "$OUT/desman_input/${MAG_NAME}-DESMAN" \
+  --h5 \
+  --samples-of-interest all
+
+# Expected DESMAN input files:
+#   <MAG>-DESMANsel_var.csv
+#   <MAG>-DESMANtran_df.csv
+
+# 6. Evaluate candidate haplotype numbers.
+# Four independent runs are performed for each candidate model.
+HAPLOTYPES=(1 2 3 4 5 6 8 10 12)
+REPLICATES=(0 1 2 3)
+
+for g in "${HAPLOTYPES[@]}"; do
+    for replicate in "${REPLICATES[@]}"; do
+        desman \
+          "$OUT/desman_input/${MAG_NAME}-DESMANsel_var.csv" \
+          -g "$g" \
+          -i 500 \
+          -e "$OUT/desman_input/${MAG_NAME}-DESMANtran_df.csv" \
+          -o "$OUT/runs/${MAG_NAME}-DESMAN_${g}_${replicate}"
+    done
+done
+
+# 7. Collect posterior-fit results.
+find "$OUT/runs" \
+  -path "*/${MAG_NAME}-DESMAN_*/fit.txt" \
+  -print0 |
+  sort -z |
+  xargs -0 -r cat \
+  > "$OUT/fit/${MAG_NAME}-DESMAN.csv"
+
+# 8. Select the optimal number of haplotypes.
+python resolvenhap.py \
+  -d 0.4 \
+  -m 2 \
+  -f 0.01 \
+  "$OUT/runs/${MAG_NAME}-DESMAN" \
+  >> "$OUT/optimal/desmanStrainOptima.csv"
+
+# Model selection considered posterior deviance and SNV/haplotype uncertainty.
+# Models with uncertainty of 10% or greater were not retained.
