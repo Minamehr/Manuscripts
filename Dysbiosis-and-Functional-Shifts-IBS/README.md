@@ -1,53 +1,62 @@
-# Metagenomic Insights into Dysbiosis and Functional Shifts in Irritable Bowel Syndrome
+# Shotgun metagenomic analysis of the gut microbiome in irritable bowel syndrome
 
-This repository contains scripts, workflows, and metadata associated with the analysis presented in the manuscript:  
-**“Metagenomic Insights into Dysbiosis and Functional Shifts in Irritable Bowel Syndrome”**
+This repository documents the final analysis workflow used for 42 gut metagenomes: 17 healthy controls and 25 participants with irritable bowel syndrome, including IBS-C, IBS-D, and IBS-M.
 
-The analysis explores taxonomic, functional, and genomic shifts in the gut microbiome of individuals with IBS (including subtypes IBS-C, IBS-D, and IBS-M) compared to healthy controls, using whole metagenome shotgun sequencing.
+Raw sequencing data are available from the European Nucleotide Archive under accession **PRJEB104707**.
 
----
+## Repository organisation
 
-## Repository Overview
+### `galaxy/`
 
-This repository is organized into several parts reflecting key stages of the analysis:
+This directory documents analyses performed in Galaxy:
 
-### **Part 1: Preprocessing**
-- **Quality control** of raw reads using TrimGalore
-- **Host read removal** using BBMap against the GRCh38.p13 human reference genome
-- **Initial taxonomic profiling** with:
-  - Kraken2 + Bracken
-  - MetaPhlAn (for validation)
+1. `preprocessing_and_taxonomy.md`
+   - paired-end quality trimming;
+   - removal of human reads;
+   - Kraken2 and Bracken taxonomic profiling;
+   - MetaPhlAn taxonomic profiling.
 
-### **Part 2: Assembly and Gene Catalog Construction**
-- **Individual metagenomic assemblies** using MetaSPAdes
-- **Gene prediction** with Prodigal (discarding genes <100 bp)
-- **Clustering of predicted genes** into a non-redundant gene catalog using MMseqs2 (95% identity, 90% overlap)
-- **Taxonomic annotation** via UniProt TrEMBL
-- **Functional annotation** with:
-  - KEGG (via KOBAS)
-  - COG (via eggNOG-mapper)
-  - CAZymes (via dbCAN + HMMER)
-  - ARGs and virulence factors (via PathoFact)
-- **Gene abundance estimation** using BWA-MEM and samsum, normalized as FPKM
+2. `gene_catalogue.md`
+   - individual metagenomic assembly;
+   - gene prediction;
+   - removal of genes shorter than 100 bp;
+   - MMseqs2 construction of the nonredundant gene catalogue.
 
-### **Part 3: Genome Reconstruction**
-- **Group-wise co-assemblies** (IBS-C, IBS-D, IBS-M, HC)
-- **MAG binning** with MetaBAT2, MaxBin2, and CONCOCT
-- **Bin refinement** via metaWRAP (Bin_refinement module)
-- **Quality assessment** with CheckM and anvi’o (≥70% completeness, ≤5% redundancy)
-- **Dereplication** using `anvi-dereplicate-genomes`
-- **Taxonomy assignment** using GTDB-Tk
-- **Functional annotation** of MAGs with anvi’o (COG, KEGG KO, Pfam, CAZy)
+3. `mag_recovery.md`
+   - group-wise co-assembly for HC, IBS-C, IBS-D, and IBS-M;
+   - MetaBAT2, MaxBin2, and CONCOCT binning;
+   - metaWRAP bin refinement;
+   - CheckM quality assessment.
 
-### **Part 4: Strain-Level Haplotyping**
-- **SNV calling and haplotype inference** using anvi’o and DESMAN
-- **Optimal haplotype number** based on posterior deviance and SNV uncertainty (<10%)
+### `script/`
 
-### **Part 5: Analyses**
-- **Functional Enrichment** ausing `anvi-estimate-metabolism` and `anvi-compute-metabolic-enrichment`
-- **Microbial network analysis** with:
-  - **SparCC** for correlation inference (|r| ≥ 0.5)
-  - **NetworkX** for centrality and connectivity metrics
-  - **Cytoscape** for visualization and modularity detection
+This directory contains analyses performed outside Galaxy:
 
+1. `Gene Annotation and Abundance`
+   - UniProt TrEMBL taxonomic annotation;
+   - KOBAS, eggNOG-mapper, dbCAN/HMMER, Pfam, and PathoFact annotation;
+   - BWA-MEM mapping to the nucleotide gene catalogue;
+   - Samsum abundance estimation and FPKM output.
 
+2. `MAG Downstream Analysis`
+   - anvi'o database construction and genome assessment;
+   - COG, KOfam, Pfam, and CAZyme annotation;
+   - dereplication at 99% ANI;
+   - GTDB-Tk taxonomy;
+   - abundance/recruitment summaries and phylogenomics.
+
+3. `MAG Metabolic Enrichment`
+   - anvi'o metabolic-module estimation;
+   - HC-versus-IBS metabolic enrichment.
+
+4. `Strain-Level Haplotyping`
+   - anvi'o nucleotide-variation profiling;
+   - DESMAN haplotype inference and model selection.
+
+Local database paths, Galaxy history links, and sample-specific paths must be adapted before applying the workflow to another dataset.
+
+## Main outputs
+
+- Nonredundant gene catalogue: **934,495 genes**.
+- Nonredundant quality-filtered MAG set: **154 MAGs**.
+- MAG metabolic enrichment input: **221 group-specific genome/bin entries** comprising 94 HC and 127 IBS entries.
