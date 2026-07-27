@@ -95,7 +95,7 @@ done > IBSC_genomes.txt
 # Run dereplication
 anvi-dereplicate-genomes -i IBSC_genomes.txt \
                          -o Dereplicated_IBSC \
-                         --ANI 95 \
+                         --ANI 99 \
                          --T 8
 
 
