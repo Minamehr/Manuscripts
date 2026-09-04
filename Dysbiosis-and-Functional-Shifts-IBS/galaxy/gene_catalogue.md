@@ -43,6 +43,4 @@ The final catalogue contained **934,495 nonredundant genes**.
 
 ## Downstream processing
 
-Taxonomic annotation, functional annotation, read mapping, Samsum abundance estimation, and FPKM output were performed outside Galaxy and are documented in:
-
-`../script/Gene Annotation and Abundance`
+Taxonomic and functional annotation, read mapping to the nucleotide gene catalogue, and gene-abundance estimation with Samsum using the reported FPKM values were performed outside Galaxy.
