@@ -1,112 +1,95 @@
-#!/usr/bin/env bash
-set -euo pipefail
+# ===============================================================
+# DOWNSTREAM MAG ANALYSIS
+# ===============================================================
 
-# DOWNSTREAM ANVI'O, DEREPLICATION, TAXONOMY, RECRUITMENT, AND PHYLOGENOMICS
 #
 # Input exported from Galaxy:
-#   refined group-specific MAG FASTA files from HC, IBS-C, IBS-D, and IBS-M.
+#   refined HC, IBS-C, IBS-D, and IBS-M bins after metaWRAP and CheckM
 
-REFINED_BINS=${REFINED_BINS:-refined_group_bins}
-OUT=${OUT:-MAG_Downstream}
-THREADS=${THREADS:-8}
+# --------- Step 1: anvi'o Databases and Genome Assessment ---------
 
-mkdir -p "$OUT"/{contigs_databases,dereplication,gtdbtk,recruitment,phylogenomics}
+mkdir -p MAG_contigs_databases
+printf "name\tcontigs_db_path\n" > group_specific_external_genomes.txt
 
-# 1. Build one anvi'o contigs database per refined MAG and run annotation.
-: > "$OUT/external-genomes.txt"
-printf "name\tcontigs_db_path\n" > "$OUT/external-genomes.txt"
+for group in HC IBSC IBSD IBSM; do
+    for genome in Binning/${group}/refined_bins/*.fa; do
+        name=${group}_$(basename "${genome%.fa}")
+        db=MAG_contigs_databases/${name}.db
 
-for genome in "$REFINED_BINS"/*.fa; do
-    name=$(basename "${genome%.fa}")
-    db="$OUT/contigs_databases/${name}.db"
+        anvi-gen-contigs-database -f "$genome" -o "$db" -n "$name"
+        anvi-run-hmms -c "$db" --num-threads 8
 
-    anvi-gen-contigs-database \
-      -f "$genome" \
-      -o "$db" \
-      -n "$name"
-
-    anvi-run-hmms \
-      -c "$db" \
-      --num-threads "$THREADS"
-
-    anvi-run-ncbi-cogs \
-      -c "$db" \
-      --num-threads "$THREADS"
-
-    anvi-run-kegg-kofams \
-      -c "$db" \
-      --num-threads "$THREADS"
-
-    anvi-run-pfams \
-      -c "$db" \
-      --num-threads "$THREADS"
-
-    anvi-run-cazymes \
-      -c "$db" \
-      --num-threads "$THREADS"
-
-    printf "%s\t%s\n" "$name" "$(realpath "$db")" \
-      >> "$OUT/external-genomes.txt"
+        printf "%s\t%s\n" "$name" "$db" \
+          >> group_specific_external_genomes.txt
+    done
 done
 
-# 2. Estimate genome completeness using anvi'o HMM collections.
 anvi-estimate-genome-completeness \
-  -e "$OUT/external-genomes.txt" \
-  -o "$OUT/genome-completeness.tsv"
+  -e group_specific_external_genomes.txt \
+  -o group_specific_genome_completeness.tsv
 
-# 3. Calculate pairwise similarity and dereplicate at 99% ANI.
+# Genomes were manually inspected using the Bacteria_71 single-copy marker set.
+# The retained group-specific set comprised 221 quality-filtered entries:
+# 94 HC and 127 IBS, each with >=70% completeness and <=5% contamination.
+
+
+# --------- Step 2: Cross-Group Dereplication ---------
+
 anvi-compute-genome-similarity \
-  -e "$OUT/external-genomes.txt" \
+  -e group_specific_external_genomes.txt \
   --program fastANI \
-  -o "$OUT/dereplication/fastANI"
+  -o Genome_Similarity
 
 anvi-dereplicate-genomes \
-  --ani-dir "$OUT/dereplication/fastANI" \
+  --ani-dir Genome_Similarity \
   --similarity-threshold 0.99 \
   --representative-method Qscore \
-  -o "$OUT/dereplication/nonredundant_MAGs"
+  -o Dereplicated_MAGs
 
-# Final study output: 154 nonredundant quality-filtered MAGs.
+# Final output: 154 nonredundant quality-filtered MAGs.
 
-# 4. Assign taxonomy with GTDB-Tk.
+
+# --------- Step 3: Taxonomy Assignment ---------
+
 gtdbtk classify_wf \
-  --genome_dir "$OUT/dereplication/nonredundant_MAGs/GENOMES" \
-  --out_dir "$OUT/gtdbtk" \
-  --cpus "$THREADS"
+  --genome_dir Dereplicated_MAGs/GENOMES \
+  --out_dir GTDBTK_MAGs \
+  --cpus 8
 
-# 5. Recruitment and abundance analysis.
-#
-# Concatenate the 154 dereplicated MAG FASTA files and map every host-filtered
-# sample to this reference. Sort and index one BAM per sample.
-#
-# Example:
-# cat "$OUT/dereplication/nonredundant_MAGs/GENOMES"/*.fa \
-#   > "$OUT/recruitment/nonredundant_MAGs.fasta"
-#
-# bwa index "$OUT/recruitment/nonredundant_MAGs.fasta"
-#
-# bwa mem -t "$THREADS" \
-#   "$OUT/recruitment/nonredundant_MAGs.fasta" \
-#   sample_R1.fastq.gz sample_R2.fastq.gz |
-#   samtools sort -@ "$THREADS" -o "$OUT/recruitment/sample.sorted.bam"
-#
-# samtools index "$OUT/recruitment/sample.sorted.bam"
-#
-# Profile the BAM files with anvi'o and merge the profiles to export abundance,
-# detection, mean coverage, coverage variability, and bin-percent recruitment.
 
-# 6. Bacteria_71 phylogenomics.
+# --------- Step 4: Functional Annotation ---------
+
+# COG, KOfam, Pfam, and CAZyme annotations were added to the MAG databases.
+for db in MAG_contigs_databases/*.db; do
+    anvi-run-ncbi-cogs -c "$db" --num-threads 8
+    anvi-run-kegg-kofams -c "$db" --num-threads 8
+    anvi-run-pfams -c "$db" --num-threads 8
+    anvi-run-cazymes -c "$db" --num-threads 8
+done
+
+
+# --------- Step 5: Recruitment and Abundance ---------
+
+# Host-filtered reads from every sample were recruited to the nonredundant MAG
+# collection using BWA-MEM. The resulting sorted and indexed BAM files were
+# profiled in anvi'o and used to obtain MAG abundance/recruitment summaries.
+
+
+# --------- Step 6: Phylogenomics ---------
+
+# nonredundant_external_genomes.txt lists the anvi'o contigs databases
+# corresponding to the 154 nonredundant MAG representatives.
+
 anvi-get-sequences-for-hmm-hits \
-  -e "$OUT/external-genomes.txt" \
+  -e nonredundant_external_genomes.txt \
   --hmm-source Bacteria_71 \
   --return-best-hit \
   --get-aa-sequences \
-  -o "$OUT/phylogenomics/Bacteria_71_proteins.faa"
+  -o Bacteria_71_proteins.faa
 
-muscle \
-  -align "$OUT/phylogenomics/Bacteria_71_proteins.faa" \
-  -output "$OUT/phylogenomics/Bacteria_71_aligned.faa"
+muscle -in Bacteria_71_proteins.faa \
+  -out Bacteria_71_aligned.faa
 
 anvi-gen-phylogenomic-tree \
-  -f "$OUT/phylogenomics/Bacteria_71_aligned.faa" \
-  -o "$OUT/phylogenomics/Bacteria_71_tree.nwk"
+  -f Bacteria_71_aligned.faa \
+  -o Bacteria_71_tree.nwk
