@@ -32,26 +32,31 @@ This directory documents analyses performed in Galaxy:
 
 This directory contains analyses performed outside Galaxy:
 
-1. `Assembly and Gene Catalog Construction`
+1. `Gene Annotation and Abundance`
    - UniProt TrEMBL taxonomic annotation;
    - KOBAS, eggNOG-mapper, dbCAN/HMMER, Pfam, and PathoFact annotation;
    - BWA-MEM mapping to the nucleotide gene catalogue;
    - Samsum abundance estimation and FPKM output.
 
-2. `Genome Reconstruction`
+2. `MAG Downstream Analysis`
    - anvi'o database construction and genome assessment;
    - COG, KOfam, Pfam, and CAZyme annotation;
    - final cross-group dereplication at 99% ANI;
    - GTDB-Tk taxonomy;
    - abundance/recruitment summaries and phylogenomics.
 
-3. `Functional Enrichment and Microbial Network Analysis`
+3. `MAG Metabolic Enrichment`
    - anvi'o metabolic-module estimation;
    - HC-versus-IBS metabolic enrichment.
 
 4. `Strain-Level Haplotyping`
    - anvi'o nucleotide-variation profiling;
    - DESMAN haplotype inference and model selection.
+
+4. `microbial_association_analysis.py` and `Microbial Association Analysis.md`
+   - final species-, strain-, and KEGG-annotated taxon association analyses;
+   - gene-catalogue-derived input matrices;
+   - shared-prevalence filtering, CLR-Pearson primary analysis, permutation/resampling/bootstrap tests, and SparCC sensitivity analysis.
 
 Local database paths, Galaxy history links, and sample-specific paths must be adapted before applying the workflow to another dataset.
 
