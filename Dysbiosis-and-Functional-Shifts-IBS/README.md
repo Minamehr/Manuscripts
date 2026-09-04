@@ -13,7 +13,7 @@ This directory documents analyses performed in Galaxy:
 1. `preprocessing_and_taxonomy.md`
    - paired-end quality trimming;
    - removal of human reads;
-   - Kraken2 and Bracken taxonomic profiling;
+   - Kraken2/Bracken taxonomic profiling;
    - MetaPhlAn taxonomic profiling.
 
 2. `gene_catalogue.md`
@@ -32,20 +32,20 @@ This directory documents analyses performed in Galaxy:
 
 This directory contains analyses performed outside Galaxy:
 
-1. `Gene Annotation and Abundance`
+1. `Assembly and Gene Catalog Construction`
    - UniProt TrEMBL taxonomic annotation;
    - KOBAS, eggNOG-mapper, dbCAN/HMMER, Pfam, and PathoFact annotation;
    - BWA-MEM mapping to the nucleotide gene catalogue;
    - Samsum abundance estimation and FPKM output.
 
-2. `MAG Downstream Analysis`
+2. `Genome Reconstruction`
    - anvi'o database construction and genome assessment;
    - COG, KOfam, Pfam, and CAZyme annotation;
-   - dereplication at 99% ANI;
+   - final cross-group dereplication at 99% ANI;
    - GTDB-Tk taxonomy;
    - abundance/recruitment summaries and phylogenomics.
 
-3. `MAG Metabolic Enrichment`
+3. `Functional Enrichment and Microbial Network Analysis`
    - anvi'o metabolic-module estimation;
    - HC-versus-IBS metabolic enrichment.
 
