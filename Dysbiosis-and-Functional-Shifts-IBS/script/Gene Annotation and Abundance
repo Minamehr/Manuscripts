@@ -1,96 +1,67 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
+# ===============================================================
 # GENE TAXONOMIC/FUNCTIONAL ANNOTATION AND ABUNDANCE ESTIMATION
+# ===============================================================
+
 #
-# Inputs exported from Galaxy:
-#   nonredundant_proteins.faa
-#   nonredundant_genes.fna
-#   host-filtered paired FASTQ files
-#
-# Replace database and environment paths before use.
+# Inputs exported from the Galaxy gene-catalogue workflow:
+#   Clustering/rep_seq.faa  representative protein catalogue
+#   Clustering/rep_seq.fna  matching nucleotide gene catalogue
+#   Clean_Reads/            host-filtered paired FASTQ files
 
-PROTEINS=${PROTEINS:-nonredundant_proteins.faa}
-GENES=${GENES:-nonredundant_genes.fna}
-CLEAN_READS=${CLEAN_READS:-Clean_Reads}
-OUT=${OUT:-Gene_Annotation_and_Abundance}
-THREADS=${THREADS:-20}
-TREMBL_DB=${TREMBL_DB:-/path/to/uniprot_trembl.dmnd}
-DBCAN_HMM=${DBCAN_HMM:-/path/to/dbCAN-HMMdb.txt}
-PFAM_HMM=${PFAM_HMM:-/path/to/Pfam-A.hmm}
+# --------- Step 1: Taxonomic Annotation (UniProt TrEMBL) ---------
 
-mkdir -p "$OUT"/{taxonomy,kegg,cog,cazyme,pfam,pathofact,mapping,samsum}
+diamond blastp -d /path/to/uniprot_trembl.dmnd \
+  -q Clustering/rep_seq.faa \
+  -o Clustering/diamond_annotation.tsv \
+  -f 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore stitle \
+  -k 1 -e 1e-5 -p 16
 
-# 1. Taxonomic annotation against UniProt TrEMBL.
-diamond blastp \
-  --db "$TREMBL_DB" \
-  --query "$PROTEINS" \
-  --out "$OUT/taxonomy/uniprot_trembl_best_hit.tsv" \
-  --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore stitle \
-  --max-target-seqs 1 \
-  --evalue 1e-5 \
-  --threads "$THREADS"
 
-# 2. KEGG annotation with KOBAS.
-kobas-annotate \
-  -i "$PROTEINS" \
-  -t fasta:pro \
-  -s ko \
-  -o "$OUT/kegg/KOBAS_annotation.tsv"
+# --------- Step 2: Functional Annotation ---------
 
-# 3. COG annotation with eggNOG-mapper.
-emapper.py \
-  -i "$PROTEINS" \
-  --itype proteins \
-  --cpu "$THREADS" \
-  --output "$OUT/cog/eggnog"
+# KEGG annotation using KOBAS
+kobas-annotate -i Clustering/rep_seq.faa \
+  -t fasta:pro -s ko -o KOBAS_annotation.tsv
 
-# 4. CAZyme annotation with dbCAN HMMs and HMMER.
-hmmscan \
-  --cpu "$THREADS" \
-  --domtblout "$OUT/cazyme/dbcan.domtblout" \
-  "$DBCAN_HMM" \
-  "$PROTEINS" \
-  > "$OUT/cazyme/dbcan.hmmscan.log"
+# COG annotation using eggNOG-mapper
+emapper.py -i Clustering/rep_seq.faa \
+  --output emapper_output --cpu 16 --itype proteins
 
-# 5. Pfam domain annotation.
-hmmscan \
-  --cpu "$THREADS" \
-  --domtblout "$OUT/pfam/pfam.domtblout" \
-  "$PFAM_HMM" \
-  "$PROTEINS" \
-  > "$OUT/pfam/pfam.hmmscan.log"
+# CAZyme annotation using dbCAN HMMs and HMMER
+hmmscan --domtblout dbcan_out.domtblout \
+  --cpu 16 /path/to/dbCAN-HMMdb-V8.txt \
+  Clustering/rep_seq.faa > dbcan_out.txt
 
-# 6. ARG and virulence-factor annotation with PathoFact.
-# Run PathoFact with the project configuration and the nonredundant protein FASTA.
-#
-# Example:
-# pathofact.py \
-#   -i "$PROTEINS" \
-#   -o "$OUT/pathofact" \
-#   --threads "$THREADS"
+# Pfam domain annotation
+hmmscan --domtblout pfam_out.domtblout \
+  --cpu 16 /path/to/Pfam-A.hmm \
+  Clustering/rep_seq.faa > pfam_out.txt
 
-# 7. Map each sample to the nucleotide gene catalogue.
-bwa index "$GENES"
+# ARG and virulence-factor annotation using PathoFact
+python pathofact.py -i Clustering/rep_seq.faa \
+  -o pathofact_output/ --threads 20
 
-for r1 in "$CLEAN_READS"/*_1_unmapped.fastq.gz; do
+
+# --------- Step 3: Gene Abundance Estimation ---------
+
+# Reads were mapped to the nucleotide gene catalogue.
+mkdir -p GeneAbundance
+bwa index Clustering/rep_seq.fna
+
+for r1 in Clean_Reads/*_1_unmapped.fastq.gz; do
     sample=$(basename "${r1%_1_unmapped.fastq.gz}")
-    r2="$CLEAN_READS/${sample}_2_unmapped.fastq.gz"
+    r2=Clean_Reads/${sample}_2_unmapped.fastq.gz
 
-    bwa mem \
-      -t "$THREADS" \
-      "$GENES" \
-      "$r1" \
-      "$r2" \
-      > "$OUT/mapping/${sample}.sam"
+    bwa mem Clustering/rep_seq.fna "$r1" "$r2" \
+      > GeneAbundance/${sample}.sam
 
-    # Samsum reports sequence length, mapped fragments, FPKM, and TPM.
+    # Samsum reports mapped fragments, FPKM, and TPM. The FPKM column from
+    # each per-sample Samsum table was used for the final abundance matrix.
     samsum stats \
-      -f "$GENES" \
-      -a "$OUT/mapping/${sample}.sam" \
-      --multireads \
-      -o "$OUT/samsum/${sample}.tsv"
+      -f Clustering/rep_seq.fna \
+      -a GeneAbundance/${sample}.sam \
+      -o GeneAbundance/${sample}_samsum.tsv
 done
 
-# Merge the per-sample Samsum FPKM columns by gene identifier to construct the
-# final gene-abundance matrix used for downstream functional analyses.
+# Per-sample Samsum FPKM columns were merged by gene identifier and aggregated
+# by taxonomic or functional annotation for downstream comparisons.
