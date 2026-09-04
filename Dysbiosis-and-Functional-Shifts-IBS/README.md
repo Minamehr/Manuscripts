@@ -53,7 +53,7 @@ This directory contains analyses performed outside Galaxy:
    - anvi'o nucleotide-variation profiling;
    - DESMAN haplotype inference and model selection.
 
-4. `microbial_association_analysis.py` and `Microbial Association Analysis.md`
+5. `microbial_association_analysis.py` and `Microbial Association Analysis.md`
    - final species-, strain-, and KEGG-annotated taxon association analyses;
    - gene-catalogue-derived input matrices;
    - shared-prevalence filtering, CLR-Pearson primary analysis, permutation/resampling/bootstrap tests, and SparCC sensitivity analysis.
