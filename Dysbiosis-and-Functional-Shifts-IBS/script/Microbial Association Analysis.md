@@ -155,4 +155,4 @@ For each layer, the script writes:
 - `run_summary.json`
 - `retained_features.csv`
 
-The analysis evaluates group-level differences in overall association strength, edge density, positive and negative edge density, matrix-wide correlation differences, and—when feature-domain information is supplied—cross-domain association structure.
+The analysis evaluates group-level differences in overall association strength, edge density, positive and negative edge density, matrix-wide correlation differences, and-when feature-domain information is supplied-cross-domain association structure.
